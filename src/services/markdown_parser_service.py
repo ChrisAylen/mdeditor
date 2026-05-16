@@ -74,6 +74,10 @@ class MarkdownParserService:
         return headings
 
     @staticmethod
+    def build_tree(headings: list[OutlineNode]) -> list[OutlineNode]:
+        return MarkdownParserService._build_tree(headings)
+
+    @staticmethod
     def _build_tree(headings: list[OutlineNode]) -> list[OutlineNode]:
         root: list[OutlineNode] = []
         stack: list[OutlineNode] = []

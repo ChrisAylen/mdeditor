@@ -22,6 +22,7 @@ class MainWindow(QMainWindow):
         self.resize(1000, 700)
 
         self.outline_state = OutlineState()
+        self._flat_headings: list = []
         self._outline_debounce = QTimer(self)
         self._outline_debounce.setSingleShot(True)
         self._outline_debounce.setInterval(200)
@@ -163,7 +164,7 @@ class MainWindow(QMainWindow):
     def _refresh_outline(self):
         content = self.editor.toPlainText()
         self._flat_headings = MarkdownParserService.extract_headings_flat(content)
-        tree = MarkdownParserService.parse_headings(content)
+        tree = MarkdownParserService.build_tree(self._flat_headings)
         self.outline_state.update_tree(tree)
         self.outline_panel.update_outline(tree)
 
@@ -186,8 +187,9 @@ class MainWindow(QMainWindow):
 
     def _on_heading_moved(self, source_id: str, target_id: str, position: str):
         content = self.editor.toPlainText()
-        flat = getattr(self, "_flat_headings", [])
-        new_content = MarkdownParserService.move_section(content, flat, source_id, target_id, position)
+        if not self._flat_headings:
+            self._flat_headings = MarkdownParserService.extract_headings_flat(content)
+        new_content = MarkdownParserService.move_section(content, self._flat_headings, source_id, target_id, position)
         if new_content != content:
             self.editor.blockSignals(True)
             self.editor.setPlainText(new_content)

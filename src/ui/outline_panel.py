@@ -37,7 +37,8 @@ class _DragDropTree(QTreeWidget):
         else:
             position = "after"
 
-        event.accept()
+        event.setDropAction(Qt.MoveAction)
+        super().dropEvent(event)
         self._drag_source_id = None
         self.item_dropped.emit(source_id, target_id, position)
 
