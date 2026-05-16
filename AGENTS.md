@@ -6,10 +6,10 @@
 - **Framework**: PySide6 (Qt 6).
 
 ## Project Structure
-- `src/services/`: File I/O (`file_service.py`)
-- `src/logic/`: State tracking (`editor_state.py`)
+- `src/services/`: Static I/O services (`file_service.py`, `recovery_service.py`)
+- `src/logic/`: Pure state/state-tracking (`editor_state.py`, `save_state_manager.py`, `outline_state.py`)
 - `src/controller/`: Orchestration (`app_controller.py`)
-- `src/ui/`: Windows and menus (`main_window.py`, `menu_bar.py`)
+- `src/ui/`: Windows and menus (`main_window.py`, `menu_bar.py`, `outline_panel.py`, `ai_worker.py`, `ai_settings_dialog.py`)
 - `src/main.py`: Application entry point
 - `tests/unit/` & `tests/integration/`: Test suites
 

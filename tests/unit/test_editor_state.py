@@ -46,3 +46,22 @@ def test_is_dirty_transition():
     
     state.set_content("Change 2")
     assert state.is_dirty() is True
+
+def test_doc_id_generated_on_access():
+    state = EditorState()
+    doc_id = state.doc_id
+    assert isinstance(doc_id, str)
+    assert len(doc_id) == 12
+
+
+def test_doc_id_stable():
+    state = EditorState()
+    assert state.doc_id == state.doc_id
+
+
+def test_reset_doc_id():
+    state = EditorState()
+    first = state.doc_id
+    state.reset_doc_id()
+    second = state.doc_id
+    assert first != second

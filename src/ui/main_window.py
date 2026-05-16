@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QMainWindow, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout,
-    QSplitter, QMenu, QMessageBox, QDockWidget
+    QSplitter, QMenu, QMessageBox, QDockWidget, QLabel
 )
 from PySide6.QtCore import Qt, QThread, QSettings, QTimer
 import markdown
@@ -10,6 +10,8 @@ from src.ui.ai_settings_dialog import AiSettingsDialog
 from src.ui.outline_panel import OutlinePanel
 from src.logic.outline_state import OutlineState
 from src.services.markdown_parser_service import MarkdownParserService
+
+AUTO_SAVE_INTERVAL_MS = 3000
 
 class MainWindow(QMainWindow):
 
@@ -24,9 +26,18 @@ class MainWindow(QMainWindow):
         self._outline_debounce.setSingleShot(True)
         self._outline_debounce.setInterval(200)
         self._outline_debounce.timeout.connect(self._refresh_outline)
-        
+
+        self._auto_save_timer = QTimer(self)
+        self._auto_save_timer.setSingleShot(True)
+        self._auto_save_timer.setInterval(AUTO_SAVE_INTERVAL_MS)
+        self._auto_save_timer.timeout.connect(self._on_auto_save)
+
+        self._save_status_label = QLabel("Saved")
+        self._save_status_label.setStyleSheet("padding: 0 8px;")
+
         self._setup_ui()
         self._connect_signals()
+        self._check_recovery_on_startup()
         
     def _setup_ui(self):
         # Menu Bar
@@ -60,6 +71,9 @@ class MainWindow(QMainWindow):
         self.outline_dock.setWidget(self.outline_panel)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.outline_dock)
 
+        # Status bar
+        self.statusBar().addPermanentWidget(self._save_status_label)
+
     def _connect_signals(self):
         # Connect menu actions to controller methods
         self.menu_bar.action_new.triggered.connect(self._on_new)
@@ -87,6 +101,12 @@ class MainWindow(QMainWindow):
 
         # Sync editor content changes to state
         self.editor.textChanged.connect(self._on_text_changed)
+
+        # Auto-save: restart debounce on every edit
+        self.editor.textChanged.connect(self._schedule_auto_save)
+
+        # Save status and title updates
+        self.editor.textChanged.connect(self._on_save_status_changed)
 
         # Outline signals
         self.editor.textChanged.connect(self._schedule_outline_refresh)
@@ -134,6 +154,8 @@ class MainWindow(QMainWindow):
         content = self.editor.toPlainText()
         self.controller.state.content = content
         self._update_preview()
+        self._update_window_title()
+        self._update_save_status()
 
     def _update_preview(self):
         content = self.editor.toPlainText()
@@ -150,6 +172,59 @@ class MainWindow(QMainWindow):
         {html_content}
         """
         self.preview.setHtml(styled_html)
+
+    def _schedule_auto_save(self):
+        if self.controller.state.is_dirty():
+            self._auto_save_timer.start()
+
+    def _on_auto_save(self):
+        if self.controller.state.is_dirty():
+            self.controller.save_recovery()
+
+    def _on_save_status_changed(self):
+        self._update_window_title()
+        self._update_save_status()
+
+    def _update_save_status(self):
+        status = self.controller.save_state_manager.status_text(
+            self.controller.state.is_dirty()
+        )
+        self._save_status_label.setText(status)
+
+    def _check_recovery_on_startup(self):
+        recoveries = self.controller.list_recoveries()
+        if not recoveries:
+            return
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Recovery Available",
+            "Recovered unsaved changes were found. Would you like to restore them?",
+            QMessageBox.Restore | QMessageBox.Discard,
+        )
+        if reply == QMessageBox.Restore:
+            for rec in recoveries:
+                content = self.controller.recover_content(rec["doc_id"])
+                if content is not None:
+                    path = rec.get("original_path")
+                    if path:
+                        self.controller.open_file(path)
+                        # Reapply recovered content on top of opened file
+                        self.controller.state.set_content(content)
+                        self.controller.state.mark_dirty()
+                    else:
+                        self.controller.create_new_file()
+                        self.controller.state.set_content(content)
+                    self.editor.setPlainText(
+                        self.controller.state.content
+                    )
+                    self._update_preview()
+                    self._update_window_title()
+                    self._update_save_status()
+                    break
+        else:
+            for rec in recoveries:
+                self.controller.discard_recovery(rec["doc_id"])
 
     def _schedule_outline_refresh(self):
         self._outline_debounce.start()
@@ -184,6 +259,8 @@ class MainWindow(QMainWindow):
             self.controller.state.content = new_content
             self._refresh_outline()
             self._update_preview()
+            self._update_window_title()
+            self._update_save_status()
 
     @staticmethod
     def _flatten_tree(nodes):
@@ -275,6 +352,7 @@ class MainWindow(QMainWindow):
             self.editor.setPlainText("")
             self.preview.setHtml("")
             self._update_window_title()
+            self._update_save_status()
     
     def _on_open(self):
         if self._confirm_save():
@@ -286,11 +364,11 @@ class MainWindow(QMainWindow):
                 self.editor.setPlainText(content)
                 self._update_preview()
                 self._update_window_title()
+                self._update_save_status()
 
 
     def _on_save_logic(self) -> bool:
         if self.controller.state.path is None:
-            # Must save as
             from PySide6.QtWidgets import QFileDialog
             path, _ = QFileDialog.getSaveFileName(self, "Save File As", "", "Markdown Files (*.md);;All Files (*)")
             if path:
@@ -298,12 +376,13 @@ class MainWindow(QMainWindow):
                     path += ".md"
                 if self.controller.save_file_as(path):
                     self._update_window_title()
+                    self._update_save_status()
                     return True
             return False
         else:
-            # Save current
             if self.controller.save_current_file():
                 self._update_window_title()
+                self._update_save_status()
                 return True
             return False
 
@@ -318,6 +397,7 @@ class MainWindow(QMainWindow):
                 path += ".md"
             if self.controller.save_file_as(path):
                 self._update_window_title()
+                self._update_save_status()
 
 
     def _update_window_title(self):
@@ -347,6 +427,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         if self._confirm_save():
+            self._auto_save_timer.stop()
             event.accept()
         else:
             event.ignore()
