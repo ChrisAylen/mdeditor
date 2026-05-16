@@ -1,7 +1,12 @@
-from PySide6.QtWidgets import QMainWindow, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout, QSplitter
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QMainWindow, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout,
+    QSplitter, QMenu, QMessageBox
+)
+from PySide6.QtCore import Qt, QThread, QSettings
 import markdown
 from src.ui.menu_bar import MenuBar
+from src.ui.ai_worker import AiWorker
+from src.ui.ai_settings_dialog import AiSettingsDialog
 
 class MainWindow(QMainWindow):
     """
@@ -37,6 +42,10 @@ class MainWindow(QMainWindow):
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 1)
 
+        # Context menu for AI actions on editor
+        self.editor.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.editor.customContextMenuRequested.connect(self._editor_context_menu)
+
     def _connect_signals(self):
         # Connect menu actions to controller methods
         self.menu_bar.action_new.triggered.connect(self._on_new)
@@ -56,6 +65,11 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_task_list.triggered.connect(lambda: self._insert_format("- [ ] "))
         self.menu_bar.action_table.triggered.connect(self._insert_table)
         self.menu_bar.action_horizontal_rule.triggered.connect(lambda: self._insert_at_cursor("\n---\n"))
+
+        # Connect AI menu actions
+        self.menu_bar.action_ai_polish.triggered.connect(lambda: self._run_ai("polish"))
+        self.menu_bar.action_ai_table.triggered.connect(lambda: self._run_ai("table"))
+        self.menu_bar.action_ai_settings.triggered.connect(self._show_ai_settings)
 
         # Sync editor content changes to state
         self.editor.textChanged.connect(self._on_text_changed)
@@ -120,6 +134,82 @@ class MainWindow(QMainWindow):
         {html_content}
         """
         self.preview.setHtml(styled_html)
+
+    def _editor_context_menu(self, pos):
+        cursor = self.editor.textCursor()
+        has_selection = cursor.hasSelection()
+        menu = self.editor.createStandardContextMenu()
+        menu.addSeparator()
+        ai_menu = menu.addMenu("AI")
+        action_polish = ai_menu.addAction("Polish Text")
+        action_polish.setEnabled(has_selection)
+        action_table = ai_menu.addAction("Convert to Table")
+        action_table.setEnabled(has_selection)
+        action_polish.triggered.connect(lambda: self._run_ai("polish"))
+        action_table.triggered.connect(lambda: self._run_ai("table"))
+        menu.exec(self.editor.mapToGlobal(pos))
+
+    def _get_ai_settings(self):
+        settings = QSettings("mdeditor", "mdeditor")
+        host = settings.value("ai/host", "http://localhost:11434")
+        model = settings.value("ai/model", "")
+        return host, model
+
+    def _run_ai(self, action: str):
+        host, model = self._get_ai_settings()
+        if not model:
+            QMessageBox.warning(
+                self, "AI Not Configured",
+                "No AI model configured. Please set one in AI > Settings."
+            )
+            self._show_ai_settings()
+            host, model = self._get_ai_settings()
+            if not model:
+                return
+
+        cursor = self.editor.textCursor()
+        if not cursor.hasSelection():
+            QMessageBox.information(self, "No Selection", "Select text first.")
+            return
+
+        selected_text = cursor.selectedText()
+
+        prompts = {
+            "polish": f"Improve the following markdown text for clarity, grammar, and correctness. Return only the improved text, no explanations:\n\n{selected_text}",
+            "table": f"Convert the following data into a well-formatted markdown table. Return only the table, no explanations:\n\n{selected_text}",
+        }
+
+        prompt = prompts.get(action)
+        if not prompt:
+            return
+
+        status_message = "Polishing..." if action == "polish" else "Converting to table..."
+        self.statusBar().showMessage(status_message)
+
+        self._ai_thread = QThread()
+        self._ai_worker = AiWorker(host, model, prompt)
+        self._ai_worker.moveToThread(self._ai_thread)
+        self._ai_thread.started.connect(self._ai_worker.run)
+        self._ai_worker.finished.connect(self._on_ai_result)
+        self._ai_worker.error.connect(self._on_ai_error)
+        self._ai_worker.finished.connect(self._ai_thread.quit)
+        self._ai_worker.finished.connect(self._ai_worker.deleteLater)
+        self._ai_worker.error.connect(self._ai_thread.quit)
+        self._ai_worker.error.connect(self._ai_worker.deleteLater)
+        self._ai_thread.finished.connect(self._ai_thread.deleteLater)
+        self._ai_thread.start()
+
+    def _on_ai_result(self, result: str):
+        self.statusBar().clearMessage()
+        self._insert_at_cursor(result)
+
+    def _on_ai_error(self, error_msg: str):
+        self.statusBar().clearMessage()
+        QMessageBox.critical(self, "AI Error", f"AI request failed:\n{error_msg}")
+
+    def _show_ai_settings(self):
+        dialog = AiSettingsDialog(self)
+        dialog.exec()
 
     def _on_new(self):
         if self._confirm_save():

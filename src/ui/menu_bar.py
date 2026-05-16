@@ -48,3 +48,15 @@ class MenuBar(QMenuBar):
         
         self.action_table = self.format_menu.addAction("&Table")
         self.action_horizontal_rule = self.format_menu.addAction("Horizontal &Rule")
+
+        # AI Menu
+        self.ai_menu = self.addMenu("&AI")
+
+        self.action_ai_polish = self.ai_menu.addAction("&Polish Text")
+        self.action_ai_polish.setShortcut("Ctrl+Shift+P")
+        self.action_ai_table = self.ai_menu.addAction("Convert to &Table")
+        self.action_ai_table.setShortcut("Ctrl+Shift+T")
+
+        self.ai_menu.addSeparator()
+
+        self.action_ai_settings = self.ai_menu.addAction("&Settings...")
