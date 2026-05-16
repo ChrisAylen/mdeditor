@@ -4,52 +4,54 @@ from src.services.markdown_parser_service import OutlineNode
 
 
 class _DragDropTree(QTreeWidget):
-    drag_started = Signal(str)
-    item_dropped = Signal(str, str, str)
+    item_dropped = Signal(int, int, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._drag_source_id: str | None = None
+        self._drag_source_line: int | None = None
 
     def startDrag(self, supported_actions):
         item = self.currentItem()
         if item:
-            self._drag_source_id = item.data(0, Qt.UserRole)
+            self._drag_source_line = item.data(0, Qt.UserRole)
         super().startDrag(supported_actions)
 
     def dropEvent(self, event):
-        source_id = self._drag_source_id
+        source_line = self._drag_source_line
         target_item = self.itemAt(event.position().toPoint())
-        if not target_item or not source_id:
+        if not target_item or source_line is None:
             event.ignore()
             return
 
-        target_id = target_item.data(0, Qt.UserRole)
-        if source_id == target_id:
+        target_line = target_item.data(0, Qt.UserRole)
+        if source_line == target_line:
             event.ignore()
             return
 
-        drop_pos = self.dropIndicatorPosition()
-        if drop_pos == QAbstractItemView.OnItem:
-            position = "child"
-        elif drop_pos == QAbstractItemView.AboveItem:
+        rect = self.visualItemRect(target_item)
+        y_in_item = event.position().toPoint().y() - rect.y()
+        ratio = y_in_item / rect.height() if rect.height() > 0 else 0.5
+
+        if ratio < 0.3:
             position = "before"
-        else:
+        elif ratio > 0.7:
             position = "after"
+        else:
+            position = "child"
 
         event.setDropAction(Qt.MoveAction)
         super().dropEvent(event)
-        self._drag_source_id = None
-        self.item_dropped.emit(source_id, target_id, position)
+        self._drag_source_line = None
+        self.item_dropped.emit(source_line, target_line, position)
 
 
 class OutlinePanel(QWidget):
     heading_clicked = Signal(int)
-    heading_moved = Signal(str, str, str)
+    heading_moved = Signal(int, int, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._node_map: dict[str, QTreeWidgetItem] = {}
+        self._line_map: dict[int, QTreeWidgetItem] = {}
         self._setup_ui()
 
     def _setup_ui(self):
@@ -76,7 +78,7 @@ class OutlinePanel(QWidget):
         layout.addWidget(self.tree)
 
     def update_outline(self, headings: list[OutlineNode]):
-        self._node_map.clear()
+        self._line_map.clear()
         self.tree.clear()
 
         if not headings:
@@ -92,26 +94,26 @@ class OutlinePanel(QWidget):
         for node in nodes:
             item = QTreeWidgetItem()
             item.setText(0, node.title)
-            item.setData(0, Qt.UserRole, node.id)
+            item.setData(0, Qt.UserRole, node.line_number)
             item.setToolTip(0, node.title)
             font = item.font(0)
             font.setBold(node.level == 1)
             item.setFont(0, font)
             parent.addChild(item)
-            self._node_map[node.id] = item
+            self._line_map[node.line_number] = item
             self._populate_tree(item, node.children)
 
-    def highlight_heading(self, heading_id: str | None):
-        for item_id, item in self._node_map.items():
-            if item_id == heading_id:
+    def highlight_heading(self, heading_line: int | None):
+        for line, item in self._line_map.items():
+            if line == heading_line:
                 item.setSelected(True)
                 self.tree.scrollToItem(item)
             else:
                 item.setSelected(False)
 
     def _on_item_clicked(self, item: QTreeWidgetItem, _column: int):
-        heading_id = item.data(0, Qt.UserRole)
-        self.heading_clicked.emit(heading_id)
+        line = item.data(0, Qt.UserRole)
+        self.heading_clicked.emit(line)
 
-    def _on_item_dropped(self, source_id: str, target_id: str, position: str):
-        self.heading_moved.emit(source_id, target_id, position)
+    def _on_item_dropped(self, source_line: int, target_line: int, position: str):
+        self.heading_moved.emit(source_line, target_line, position)

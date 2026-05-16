@@ -12,9 +12,7 @@ from src.logic.outline_state import OutlineState
 from src.services.markdown_parser_service import MarkdownParserService
 
 class MainWindow(QMainWindow):
-    """
-    Main window of the Markdown Editor.
-    """
+
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
@@ -22,7 +20,6 @@ class MainWindow(QMainWindow):
         self.resize(1000, 700)
 
         self.outline_state = OutlineState()
-        self._flat_headings: list = []
         self._outline_debounce = QTimer(self)
         self._outline_debounce.setSingleShot(True)
         self._outline_debounce.setInterval(200)
@@ -136,18 +133,14 @@ class MainWindow(QMainWindow):
     def _on_text_changed(self):
         content = self.editor.toPlainText()
         self.controller.state.content = content
-        
-        # Fix Task Lists: Use Unicode checkboxes (QTextEdit's HTML engine does not support <input>)
+        self._update_preview()
+
+    def _update_preview(self):
+        content = self.editor.toPlainText()
         import re
         processed_content = re.sub(r'^- \[ \]', '☐ ', content, flags=re.MULTILINE)
         processed_content = re.sub(r'^- \[x\]', '☑ ', processed_content, flags=re.MULTILINE)
-        
-        # Update Preview with extensions for tables and list styles
-        # We use 'tables' extension (part of 'extra') for table support
         html_content = markdown.markdown(processed_content, extensions=['extra', 'sane_lists'])
-        
-        # Qt's QTextEdit.setHtml() has limited CSS support. 
-        # To make tables look like tables, we wrap them in a basic style block.
         styled_html = f"""
         <style>
             table {{ border-collapse: collapse; border: 1px solid black; width: 100%; }}
@@ -163,8 +156,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_outline(self):
         content = self.editor.toPlainText()
-        self._flat_headings = MarkdownParserService.extract_headings_flat(content)
-        tree = MarkdownParserService.build_tree(self._flat_headings)
+        tree = MarkdownParserService.parse_headings(content)
         self.outline_state.update_tree(tree)
         self.outline_panel.update_outline(tree)
 
@@ -172,30 +164,26 @@ class MainWindow(QMainWindow):
         cursor = self.editor.textCursor()
         line_number = cursor.blockNumber() + 1
         self.outline_state.set_active_by_line(line_number)
-        self.outline_panel.highlight_heading(self.outline_state.active_heading_id)
+        self.outline_panel.highlight_heading(self.outline_state.active_heading_line)
 
-    def _navigate_to_heading(self, heading_id: str):
-        for node in self._flatten_tree(self.outline_state.tree):
-            if node.id == heading_id:
-                cursor = self.editor.textCursor()
-                block = self.editor.document().findBlockByNumber(node.line_number - 1)
-                if block:
-                    cursor.setPosition(block.position())
-                    self.editor.setTextCursor(cursor)
-                    self.editor.setFocus()
-                break
+    def _navigate_to_heading(self, heading_line: int):
+        block = self.editor.document().findBlockByNumber(heading_line - 1)
+        if block:
+            cursor = self.editor.textCursor()
+            cursor.setPosition(block.position())
+            self.editor.setTextCursor(cursor)
+            self.editor.setFocus()
 
-    def _on_heading_moved(self, source_id: str, target_id: str, position: str):
+    def _on_heading_moved(self, source_line: int, target_line: int, position: str):
         content = self.editor.toPlainText()
-        if not self._flat_headings:
-            self._flat_headings = MarkdownParserService.extract_headings_flat(content)
-        new_content = MarkdownParserService.move_section(content, self._flat_headings, source_id, target_id, position)
+        new_content = MarkdownParserService.move_section(content, source_line, target_line, position)
         if new_content != content:
             self.editor.blockSignals(True)
             self.editor.setPlainText(new_content)
             self.editor.blockSignals(False)
             self.controller.state.content = new_content
             self._refresh_outline()
+            self._update_preview()
 
     @staticmethod
     def _flatten_tree(nodes):
@@ -291,26 +279,12 @@ class MainWindow(QMainWindow):
     def _on_open(self):
         if self._confirm_save():
             from PySide6.QtWidgets import QFileDialog
-            import re
             path, _ = QFileDialog.getOpenFileName(self, "Open File", "", "Markdown Files (*.md);;All Files (*)")
             if path:
                 self.controller.open_file(path)
                 content = self.controller.state.content
                 self.editor.setPlainText(content)
-                
-                processed_content = re.sub(r'^- \[ \]', '☐ ', content, flags=re.MULTILINE)
-                processed_content = re.sub(r'^- \[x\]', '☑ ', processed_content, flags=re.MULTILINE)
-                
-                html_content = markdown.markdown(processed_content, extensions=['extra', 'sane_lists'])
-                styled_html = f"""
-                <style>
-                    table {{ border-collapse: collapse; border: 1px solid black; width: 100%; }}
-                    th, td {{ border: 1px solid black; padding: 4px; text-align: left; }}
-                    th {{ background-color: #f2f2f2; font-weight: bold; }}
-                </style>
-                {html_content}
-                """
-                self.preview.setHtml(styled_html)
+                self._update_preview()
                 self._update_window_title()
 
 

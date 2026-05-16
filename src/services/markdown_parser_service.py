@@ -1,12 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 import re
-import uuid
 
 
 @dataclass
 class OutlineNode:
-    id: str
     level: int
     title: str
     line_number: int
@@ -64,7 +62,6 @@ class MarkdownParserService:
 
             headings.append(
                 OutlineNode(
-                    id=str(uuid.uuid4()),
                     level=level,
                     title=title,
                     line_number=lineno,
@@ -98,46 +95,72 @@ class MarkdownParserService:
     @staticmethod
     def move_section(
         markdown_text: str,
-        flat_headings: list[OutlineNode],
-        source_id: str,
-        target_id: str,
+        source_line: int,
+        target_line: int,
         position: str,
     ) -> str:
-        source = _find_by_id(flat_headings, source_id)
-        target = _find_by_id(flat_headings, target_id)
-        if source is None or target is None or source_id == target_id:
+        flat = MarkdownParserService.extract_headings_flat(markdown_text)
+
+        source_idx = None
+        target_idx = None
+        for i, h in enumerate(flat):
+            if h.line_number == source_line:
+                source_idx = i
+            if h.line_number == target_line:
+                target_idx = i
+
+        if source_idx is None or target_idx is None or source_idx == target_idx:
             return markdown_text
 
-        source_idx = next(i for i, h in enumerate(flat_headings) if h.id == source_id)
-        target_idx = next(i for i, h in enumerate(flat_headings) if h.id == target_id)
+        source = flat[source_idx]
+        target = flat[target_idx]
 
         lines = markdown_text.split("\n")
 
         src_start = source.line_number - 1
-        src_end = _section_end(flat_headings, source_idx, len(lines))
+        src_end = _section_end(flat, source_idx, len(lines))
 
-        tgt_start = target.line_number - 1
+        # Prevent moving source onto/into its own section
+        if source.line_number < target.line_number <= src_end:
+            return markdown_text
+
+        # Collect all headings within the moved section
+        section_headings = [source]
+        for i in range(source_idx + 1, len(flat)):
+            if flat[i].line_number - 1 >= src_end:
+                break
+            section_headings.append(flat[i])
+
+        # Determine new level for the top heading based on target context
+        if position == "child":
+            new_top_level = min(target.level + 1, 6)
+        else:
+            new_top_level = target.level
+
+        delta = new_top_level - source.level
 
         source_lines = lines[src_start:src_end]
 
-        if position == "child":
-            new_level = min(source.level + 1, 6)
-            old_prefix = "#" * source.level
-            new_prefix = "#" * new_level
-            source_lines[0] = source_lines[0].replace(old_prefix, new_prefix, 1)
+        if delta != 0:
+            for h in section_headings:
+                idx = h.line_number - 1 - src_start
+                old_prefix = "#" * h.level
+                new_level = max(1, min(h.level + delta, 6))
+                new_prefix = "#" * new_level
+                source_lines[idx] = source_lines[idx].replace(old_prefix, new_prefix, 1)
 
         remaining = lines[:src_start] + lines[src_end:]
 
         removed_count = src_end - src_start
         if target.line_number > source.line_number:
-            tgt_line_adj = tgt_start - removed_count
+            tgt_line_adj = (target.line_number - 1) - removed_count
         else:
-            tgt_line_adj = tgt_start
+            tgt_line_adj = target.line_number - 1
 
         if position == "before":
             insert_at = tgt_line_adj
         elif position == "after":
-            tgt_end = _section_end(flat_headings, target_idx, len(lines)) - removed_count
+            tgt_end = _section_end(flat, target_idx, len(lines)) - removed_count
             insert_at = tgt_end
         else:
             insert_at = tgt_line_adj + 1
@@ -145,12 +168,6 @@ class MarkdownParserService:
         result_lines = remaining[:insert_at] + source_lines + remaining[insert_at:]
         return "\n".join(result_lines)
 
-
-def _find_by_id(nodes: list[OutlineNode], heading_id: str) -> OutlineNode | None:
-    for node in nodes:
-        if node.id == heading_id:
-            return node
-    return None
 
 
 def _section_end(flat: list[OutlineNode], idx: int, total_lines: int) -> int:
