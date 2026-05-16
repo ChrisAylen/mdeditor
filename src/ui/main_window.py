@@ -1,12 +1,15 @@
 from PySide6.QtWidgets import (
     QMainWindow, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout,
-    QSplitter, QMenu, QMessageBox
+    QSplitter, QMenu, QMessageBox, QDockWidget
 )
-from PySide6.QtCore import Qt, QThread, QSettings
+from PySide6.QtCore import Qt, QThread, QSettings, QTimer
 import markdown
 from src.ui.menu_bar import MenuBar
 from src.ui.ai_worker import AiWorker
 from src.ui.ai_settings_dialog import AiSettingsDialog
+from src.ui.outline_panel import OutlinePanel
+from src.logic.outline_state import OutlineState
+from src.services.markdown_parser_service import MarkdownParserService
 
 class MainWindow(QMainWindow):
     """
@@ -16,7 +19,13 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller
         self.setWindowTitle("Simple Markdown Editor")
-        self.resize(800, 600)
+        self.resize(1000, 700)
+
+        self.outline_state = OutlineState()
+        self._outline_debounce = QTimer(self)
+        self._outline_debounce.setSingleShot(True)
+        self._outline_debounce.setInterval(200)
+        self._outline_debounce.timeout.connect(self._refresh_outline)
         
         self._setup_ui()
         self._connect_signals()
@@ -46,6 +55,13 @@ class MainWindow(QMainWindow):
         self.editor.setContextMenuPolicy(Qt.CustomContextMenu)
         self.editor.customContextMenuRequested.connect(self._editor_context_menu)
 
+        # Outline dock widget
+        self.outline_dock = QDockWidget("Outline", self)
+        self.outline_dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
+        self.outline_panel = OutlinePanel()
+        self.outline_dock.setWidget(self.outline_panel)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.outline_dock)
+
     def _connect_signals(self):
         # Connect menu actions to controller methods
         self.menu_bar.action_new.triggered.connect(self._on_new)
@@ -73,6 +89,11 @@ class MainWindow(QMainWindow):
 
         # Sync editor content changes to state
         self.editor.textChanged.connect(self._on_text_changed)
+
+        # Outline signals
+        self.editor.textChanged.connect(self._schedule_outline_refresh)
+        self.editor.cursorPositionChanged.connect(self._update_active_heading)
+        self.outline_panel.heading_clicked.connect(self._navigate_to_heading)
 
     def _insert_at_cursor(self, text: str):
         cursor = self.editor.textCursor()
@@ -134,6 +155,40 @@ class MainWindow(QMainWindow):
         {html_content}
         """
         self.preview.setHtml(styled_html)
+
+    def _schedule_outline_refresh(self):
+        self._outline_debounce.start()
+
+    def _refresh_outline(self):
+        content = self.editor.toPlainText()
+        tree = MarkdownParserService.parse_headings(content)
+        self.outline_state.update_tree(tree)
+        self.outline_panel.update_outline(tree)
+
+    def _update_active_heading(self):
+        cursor = self.editor.textCursor()
+        line_number = cursor.blockNumber() + 1
+        self.outline_state.set_active_by_line(line_number)
+        self.outline_panel.highlight_heading(self.outline_state.active_heading_id)
+
+    def _navigate_to_heading(self, heading_id: str):
+        for node in self._flatten_tree(self.outline_state.tree):
+            if node.id == heading_id:
+                cursor = self.editor.textCursor()
+                block = self.editor.document().findBlockByNumber(node.line_number - 1)
+                if block:
+                    cursor.setPosition(block.position())
+                    self.editor.setTextCursor(cursor)
+                    self.editor.setFocus()
+                break
+
+    @staticmethod
+    def _flatten_tree(nodes):
+        result = []
+        for node in nodes:
+            result.append(node)
+            result.extend(MainWindow._flatten_tree(node.children))
+        return result
 
     def _editor_context_menu(self, pos):
         cursor = self.editor.textCursor()

@@ -20,6 +20,7 @@
 | Task Lists | Implement task lists correctly (e.g., ``- [ ] Incomplete task`` and ``- [x] Complete task``). These are currently not functioning. |
 | Table Support | Implement table support so that tables render correctly via the Markdown `extra` extension. |
 | Formatting Menu | Provide a formatting menu that lets users select/insert items such as headings, lists, tables, bold, italic, and horizontal rules. |
+| Document Outline | A docked sidebar panel showing a real-time hierarchical heading outline. Supports navigation (click to jump), active-section highlighting, and debounced live updates. Ignores headings inside fenced code blocks. |
 
 
 
