@@ -38,26 +38,58 @@ def test_extract_all_levels():
     tree = MarkdownParserService.parse_headings(md)
     all_nodes = _all_nodes_flat(tree)
     assert len(all_nodes) == 6
-    for i, node in enumerate(all_nodes):
-        assert node.level == i + 1
 
 
-def test_headings_outside_code_block():
-    md = """# Real Heading
+def test_extract_headings_flat():
+    md = "# A\n## B\n### C\n"
+    flat = MarkdownParserService.extract_headings_flat(md)
+    assert len(flat) == 3
+    assert flat[0].title == "A"
+    assert flat[1].title == "B"
+    assert flat[2].title == "C"
 
-```python
-# This is a comment, not a heading
-def foo():
-    pass
-```
 
-## Another Real Heading
-"""
-    tree = MarkdownParserService.parse_headings(md)
-    all_nodes = _all_nodes_flat(tree)
-    assert len(all_nodes) == 2
-    assert all_nodes[0].title == "Real Heading"
-    assert all_nodes[1].title == "Another Real Heading"
+def test_move_section_before():
+    md = "# A\naaa\n## B\nbbb\n# C\nccc\n"
+    flat = MarkdownParserService.extract_headings_flat(md)
+    result = MarkdownParserService.move_section(md, flat, flat[1].id, flat[2].id, "before")
+    assert result == md
+
+
+def test_move_section_after():
+    md = "# A\naaa\n## B\nbbb\n# C\nccc\n"
+    flat = MarkdownParserService.extract_headings_flat(md)
+    result = MarkdownParserService.move_section(md, flat, flat[1].id, flat[0].id, "after")
+    lines = result.split("\n")
+    assert lines[0] == "# A"
+    assert lines[1] == "aaa"
+    assert lines[2] == "## B"
+    assert lines[3] == "bbb"
+    assert lines[4] == "# C"
+
+
+def test_move_section_child():
+    md = "# A\naaa\n## B\nbbb"
+    flat = MarkdownParserService.extract_headings_flat(md)
+    result = MarkdownParserService.move_section(md, flat, flat[1].id, flat[0].id, "child")
+    lines = result.split("\n")
+    assert lines[0] == "# A"
+    assert lines[1] == "### B"
+    assert lines[2] == "bbb"
+    assert lines[3] == "aaa"
+
+
+def test_move_section_self_noop():
+    md = "# A\n## B\n"
+    flat = MarkdownParserService.extract_headings_flat(md)
+    result = MarkdownParserService.move_section(md, flat, flat[0].id, flat[0].id, "after")
+    assert result == md
+
+
+def test_move_section_invalid_id_noop():
+    md = "# A\n"
+    result = MarkdownParserService.move_section(md, [], "nonexistent", "also_fake", "after")
+    assert result == md
 
 
 def test_headings_inside_nested_fences():

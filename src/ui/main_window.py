@@ -94,6 +94,7 @@ class MainWindow(QMainWindow):
         self.editor.textChanged.connect(self._schedule_outline_refresh)
         self.editor.cursorPositionChanged.connect(self._update_active_heading)
         self.outline_panel.heading_clicked.connect(self._navigate_to_heading)
+        self.outline_panel.heading_moved.connect(self._on_heading_moved)
 
     def _insert_at_cursor(self, text: str):
         cursor = self.editor.textCursor()
@@ -161,6 +162,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_outline(self):
         content = self.editor.toPlainText()
+        self._flat_headings = MarkdownParserService.extract_headings_flat(content)
         tree = MarkdownParserService.parse_headings(content)
         self.outline_state.update_tree(tree)
         self.outline_panel.update_outline(tree)
@@ -181,6 +183,17 @@ class MainWindow(QMainWindow):
                     self.editor.setTextCursor(cursor)
                     self.editor.setFocus()
                 break
+
+    def _on_heading_moved(self, source_id: str, target_id: str, position: str):
+        content = self.editor.toPlainText()
+        flat = getattr(self, "_flat_headings", [])
+        new_content = MarkdownParserService.move_section(content, flat, source_id, target_id, position)
+        if new_content != content:
+            self.editor.blockSignals(True)
+            self.editor.setPlainText(new_content)
+            self.editor.blockSignals(False)
+            self.controller.state.content = new_content
+            self._refresh_outline()
 
     @staticmethod
     def _flatten_tree(nodes):
