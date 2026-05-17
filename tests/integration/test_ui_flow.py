@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtWidgets import QApplication, QTextEdit
+from PySide6.QtWidgets import QApplication, QSplitter
 from src.ui.main_window import MainWindow
 from src.ui.menu_bar import MenuBar
 from src.controller.app_controller import AppController
@@ -20,7 +20,7 @@ def test_main_window_initialization(qapp):
     window = MainWindow(controller)
     assert "Simple Markdown Editor" in window.windowTitle()
     assert window.centralWidget() is not None
-    assert isinstance(window.centralWidget(), QTextEdit)
+    assert isinstance(window.centralWidget(), QSplitter)
 
 def test_menu_bar_actions(qapp):
     state = EditorState()

@@ -9,6 +9,9 @@ from src.logic.conversation_service import ConversationService
 from src.logic.ai_provider_client import AIProviderClient, AIProviderError
 from src.ui.ai_worker import AiWorker
 
+DOC_SIZE_WARN_THRESHOLD = 8000
+DOC_SIZE_LARGE_THRESHOLD = 15000
+
 
 class _ChatBubble(QFrame):
     def __init__(self, role: str, content: str, parent=None):
@@ -120,12 +123,17 @@ class AIChatPanel(QWidget):
         layout.addWidget(self.status_label)
 
         self.input_edit = QTextEdit()
-        self.input_edit.setPlaceholderText("Type a message…")
+        self.input_edit.setPlaceholderText("Type a message\u2026")
         self.input_edit.setMaximumHeight(80)
         self.input_edit.setAcceptRichText(False)
         layout.addWidget(self.input_edit)
 
         btn_layout = QHBoxLayout()
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setFixedWidth(70)
+        self.cancel_btn.setVisible(False)
+        self.cancel_btn.clicked.connect(self._on_cancel)
+        btn_layout.addWidget(self.cancel_btn)
         btn_layout.addStretch()
         self.send_btn = QPushButton("Send")
         self.send_btn.setFixedWidth(80)
@@ -134,6 +142,7 @@ class AIChatPanel(QWidget):
 
         self.input_edit.textChanged.connect(self._on_input_changed)
         self.send_btn.clicked.connect(self._on_send)
+        self._on_input_changed()
 
     def _get_ai_settings(self):
         settings = QSettings("mdeditor", "mdeditor")
@@ -166,7 +175,6 @@ class AIChatPanel(QWidget):
         selected_text = None
         full_document = None
         if context_mode == PromptBuilder.CONTEXT_SELECTED:
-            from PySide6.QtWidgets import QApplication
             focus = QApplication.focusWidget()
             if focus and hasattr(focus, "textCursor") and hasattr(focus, "toPlainText"):
                 cursor = focus.textCursor()
@@ -180,6 +188,23 @@ class AIChatPanel(QWidget):
                 return
         elif context_mode == PromptBuilder.CONTEXT_DOCUMENT:
             full_document = self.controller.state.content
+            if full_document and len(full_document) > DOC_SIZE_LARGE_THRESHOLD:
+                proceed = QMessageBox.question(
+                    self, "Large Document",
+                    f"The document is {len(full_document)} characters. "
+                    "Sending large documents may be slow or fail.\n\n"
+                    "Proceed anyway?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if proceed != QMessageBox.Yes:
+                    return
+            elif full_document and len(full_document) > DOC_SIZE_WARN_THRESHOLD:
+                QMessageBox.information(
+                    self, "Large Document",
+                    f"The document is {len(full_document)} characters. "
+                    "Consider using 'Selected Text' mode instead "
+                    "for better performance.",
+                )
 
         self.conversation.add_user_message(user_text, context_mode=context_mode)
         self._rebuild_messages()
@@ -212,30 +237,63 @@ class AIChatPanel(QWidget):
         self._pending_thread.finished.connect(self._on_thread_done)
         self._pending_thread.start()
 
+    def _on_cancel(self):
+        if self._pending_thread and self._pending_thread.isRunning():
+            self._pending_thread.quit()
+            self._pending_thread.wait(2000)
+            self._pending_worker = None
+            self._pending_thread = None
+            self.status_label.setText("Cancelled")
+            self.status_label.setStyleSheet("color: #a0aec0; font-size: 12px;")
+            self._set_waiting(False)
+
     def _on_response(self, content: str):
         self.conversation.add_assistant_message(content)
         self._rebuild_messages()
         self._set_waiting(False)
 
     def _on_error(self, error_msg: str):
-        self.status_label.setText(f"Error: {error_msg}")
+        friendly = self._friendly_error(error_msg)
+        self.status_label.setText(friendly)
         self.status_label.setStyleSheet("color: #e53e3e; font-size: 12px;")
         self.status_label.setVisible(True)
         self._set_waiting(False)
+
+    @staticmethod
+    def _friendly_error(raw: str) -> str:
+        lower = raw.lower()
+        if "connection refused" in lower or "errno 111" in lower:
+            return (
+                "Cannot reach Ollama.\n"
+                "Check that Ollama is running."
+            )
+        if "timeout" in lower or "timed out" in lower:
+            return (
+                "Request timed out.\n"
+                "Check your network or try a smaller document."
+            )
+        if "model" in lower and "not found" in lower:
+            return (
+                "Model not found.\n"
+                "Check that the model name is correct in AI > Settings."
+            )
+        return f"AI request failed: {raw}"
 
     def _on_thread_done(self):
         self._pending_thread = None
         self._pending_worker = None
 
     def _set_waiting(self, waiting: bool):
-        self.send_btn.setEnabled(not waiting)
+        self.send_btn.setVisible(not waiting)
+        self.cancel_btn.setVisible(waiting)
         self.input_edit.setEnabled(not waiting)
         if waiting:
-            self.status_label.setText("Generating…")
+            self.status_label.setText("Generating\u2026")
             self.status_label.setStyleSheet("color: #718096; font-size: 12px;")
             self.status_label.setVisible(True)
         else:
-            self.status_label.setVisible(False)
+            if not self.status_label.text().startswith("Error"):
+                self.status_label.setVisible(False)
         self._on_input_changed()
 
     def _rebuild_messages(self):
