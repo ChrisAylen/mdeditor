@@ -8,6 +8,7 @@ from src.ui.menu_bar import MenuBar
 from src.ui.ai_worker import AiWorker
 from src.ui.ai_settings_dialog import AiSettingsDialog
 from src.ui.outline_panel import OutlinePanel
+from src.ui.ai_chat_panel import AIChatPanel
 from src.logic.outline_state import OutlineState
 from src.services.markdown_parser_service import MarkdownParserService
 
@@ -71,6 +72,14 @@ class MainWindow(QMainWindow):
         self.outline_dock.setWidget(self.outline_panel)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.outline_dock)
 
+        # AI Chat dock widget (right side)
+        self.chat_dock = QDockWidget("AI Chat", self)
+        self.chat_dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable | QDockWidget.DockWidgetClosable)
+        self.chat_panel = AIChatPanel(self.controller)
+        self.chat_dock.setWidget(self.chat_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.chat_dock)
+        self.chat_dock.visibilityChanged.connect(self._on_chat_visibility_changed)
+
         # Status bar
         self.statusBar().addPermanentWidget(self._save_status_label)
 
@@ -107,6 +116,15 @@ class MainWindow(QMainWindow):
 
         # Save status and title updates
         self.editor.textChanged.connect(self._on_save_status_changed)
+
+        # View menu toggles
+        self.menu_bar.action_toggle_chat.triggered.connect(self._toggle_chat)
+        self.menu_bar.action_toggle_outline.triggered.connect(self._toggle_outline)
+
+        # AI Chat signals
+        self.chat_panel.insert_text_requested.connect(self._insert_at_cursor)
+        self.chat_panel.replace_selection_requested.connect(self._replace_selection)
+        self.chat_panel.copy_text_requested.connect(self._copy_to_clipboard)
 
         # Outline signals
         self.editor.textChanged.connect(self._schedule_outline_refresh)
@@ -261,6 +279,27 @@ class MainWindow(QMainWindow):
             self._update_preview()
             self._update_window_title()
             self._update_save_status()
+
+    def _toggle_chat(self, visible: bool):
+        self.chat_dock.setVisible(visible)
+
+    def _toggle_outline(self, visible: bool):
+        self.outline_dock.setVisible(visible)
+
+    def _on_chat_visibility_changed(self, visible: bool):
+        self.menu_bar.action_toggle_chat.setChecked(visible)
+
+    def _replace_selection(self, text: str):
+        cursor = self.editor.textCursor()
+        if cursor.hasSelection():
+            cursor.insertText(text)
+            self.editor.setTextCursor(cursor)
+        else:
+            self._insert_at_cursor(text)
+
+    def _copy_to_clipboard(self, text: str):
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(text)
 
     @staticmethod
     def _flatten_tree(nodes):

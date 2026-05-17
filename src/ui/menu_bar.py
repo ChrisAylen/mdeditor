@@ -49,6 +49,20 @@ class MenuBar(QMenuBar):
         self.action_table = self.format_menu.addAction("&Table")
         self.action_horizontal_rule = self.format_menu.addAction("Horizontal &Rule")
 
+        # View Menu
+        self.view_menu = self.addMenu("&View")
+
+        self.action_toggle_chat = self.view_menu.addAction("AI &Chat Sidebar")
+        self.action_toggle_chat.setCheckable(True)
+        self.action_toggle_chat.setChecked(True)
+        self.action_toggle_chat.setShortcut("Ctrl+Shift+C")
+
+        self.view_menu.addSeparator()
+
+        self.action_toggle_outline = self.view_menu.addAction("&Outline Sidebar")
+        self.action_toggle_outline.setCheckable(True)
+        self.action_toggle_outline.setChecked(True)
+
         # AI Menu
         self.ai_menu = self.addMenu("&AI")
 
