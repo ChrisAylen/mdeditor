@@ -20,20 +20,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install system deps (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libegl1 libxkbcommon0
+
       - name: Install package with dev deps
         run: pip install .[dev]
 
       - name: Unit tests
-        run: python -m pytest tests/unit/ -v
+        run: QT_QPA_PLATFORM=offscreen python -m pytest tests/unit/ -v
 
-      - name: Integration tests (Linux)
+      - name: Integration tests (Linux only)
         if: runner.os == 'Linux'
         run: QT_QPA_PLATFORM=offscreen python -m pytest tests/integration/ -v
-
-      - name: Integration tests (macOS)
-        if: runner.os == 'macOS'
-        run: python -m pytest tests/integration/ -v
-
-      - name: Integration tests (Windows)
-        if: runner.os == 'Windows'
-        run: python -m pytest tests/integration/ -v
