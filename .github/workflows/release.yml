@@ -64,25 +64,24 @@ jobs:
           name: pyinstaller-linux-x86_64
       - name: Extract binary
         run: tar xzf mdeditor-linux-x86_64.tar.gz
-      - name: Create .deb with dpkg-deb
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          PKG="mdeditor_${VERSION}_amd64"
-          mkdir -p "$PKG/DEBIAN"
-          mkdir -p "$PKG/usr/bin"
-          mkdir -p "$PKG/usr/share/applications"
-          mkdir -p "$PKG/usr/share/icons/hicolor/scalable/apps"
-          cp mdeditor "$PKG/usr/bin/"
-          cp mdeditor.desktop "$PKG/usr/share/applications/"
-          cp icons/mdeditor.svg "$PKG/usr/share/icons/hicolor/scalable/apps/"
-          echo "Package: mdeditor" > "$PKG/DEBIAN/control"
-          echo "Version: $VERSION" >> "$PKG/DEBIAN/control"
-          echo "Architecture: amd64" >> "$PKG/DEBIAN/control"
-          echo "Maintainer: Chris Aylen" >> "$PKG/DEBIAN/control"
-          echo "Description: A simple Markdown editor with AI integration" >> "$PKG/DEBIAN/control"
-          echo "Recommends: ollama" >> "$PKG/DEBIAN/control"
+      - name: Set version env
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+      - name: Populate .deb directory
+        run: >-
+          PKG="mdeditor_${VERSION}_amd64" &&
+          mkdir -p "$PKG/DEBIAN" "$PKG/usr/bin" "$PKG/usr/share/applications" "$PKG/usr/share/icons/hicolor/scalable/apps" &&
+          cp mdeditor "$PKG/usr/bin/" &&
+          cp mdeditor.desktop "$PKG/usr/share/applications/" &&
+          cp icons/mdeditor.svg "$PKG/usr/share/icons/hicolor/scalable/apps/" &&
+          echo "Package: mdeditor" > "$PKG/DEBIAN/control" &&
+          echo "Version: $VERSION" >> "$PKG/DEBIAN/control" &&
+          echo "Architecture: amd64" >> "$PKG/DEBIAN/control" &&
+          echo "Maintainer: Chris Aylen" >> "$PKG/DEBIAN/control" &&
+          echo "Description: A simple Markdown editor with AI integration" >> "$PKG/DEBIAN/control" &&
+          echo "Recommends: ollama" >> "$PKG/DEBIAN/control" &&
           echo "License: MIT" >> "$PKG/DEBIAN/control"
-          dpkg-deb --root-owner-group --build "$PKG"
+      - name: Build .deb
+        run: dpkg-deb --root-owner-group --build "mdeditor_${VERSION}_amd64"
       - uses: actions/upload-artifact@v4
         with:
           name: deb-package
