@@ -56,6 +56,7 @@ jobs:
   package-deb:
     needs: build-pyinstaller
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -63,22 +64,27 @@ jobs:
           name: pyinstaller-linux-x86_64
       - name: Extract binary
         run: tar xzf mdeditor-linux-x86_64.tar.gz
-      - name: Create .deb with fpm
+      - name: Create .deb with dpkg-deb
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ruby ruby-dev
-          sudo gem install fpm
           VERSION=${GITHUB_REF_NAME#v}
-          fpm -s dir -t deb \
-            -n mdeditor \
-            -v "$VERSION" \
-            --architecture amd64 \
-            --url "https://github.com/ChrisAylen/mdeditor" \
-            --license MIT \
-            --description "A simple Markdown editor with AI integration" \
-            --vendor "Chris Aylen" \
-            --deb-field "Recommends: ollama" \
-            mdeditor=/usr/bin/mdeditor
+          PKG="mdeditor_${VERSION}_amd64"
+          mkdir -p "$PKG/DEBIAN"
+          mkdir -p "$PKG/usr/bin"
+          mkdir -p "$PKG/usr/share/applications"
+          mkdir -p "$PKG/usr/share/icons/hicolor/scalable/apps"
+          cp mdeditor "$PKG/usr/bin/"
+          cp mdeditor.desktop "$PKG/usr/share/applications/"
+          cp icons/mdeditor.svg "$PKG/usr/share/icons/hicolor/scalable/apps/"
+          cat > "$PKG/DEBIAN/control" <<EOF
+Package: mdeditor
+Version: $VERSION
+Architecture: amd64
+Maintainer: Chris Aylen
+Description: A simple Markdown editor with AI integration
+Recommends: ollama
+License: MIT
+EOF
+          dpkg-deb --root-owner-group --build "$PKG"
       - uses: actions/upload-artifact@v4
         with:
           name: deb-package
@@ -87,6 +93,7 @@ jobs:
   package-appimage:
     needs: build-pyinstaller
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -97,15 +104,15 @@ jobs:
       - name: Build AppImage
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          # Use linuxdeploy to bundle the PyInstaller binary into an AppDir
           wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
           chmod +x linuxdeploy-x86_64.AppImage
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          # Extract (GitHub CI has no FUSE)
+          ./linuxdeploy-x86_64.AppImage --appimage-extract > /dev/null 2>&1
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
           cp mdeditor AppDir/usr/bin/
           cp mdeditor.desktop AppDir/usr/share/applications/
           cp icons/mdeditor.svg AppDir/usr/share/icons/hicolor/scalable/apps/mdeditor.svg
-          # Use linuxdeploy's built-in plugin to convert
-          ./linuxdeploy-x86_64.AppImage \
+          ./squashfs-root/linuxdeploy \
             --appdir AppDir \
             --output appimage \
             --desktop-file AppDir/usr/share/applications/mdeditor.desktop \
@@ -123,6 +130,7 @@ jobs:
   package-dmg:
     needs: build-pyinstaller
     runs-on: macos-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -146,11 +154,7 @@ jobs:
           path: "*.dmg"
 
   release:
-    needs:
-      - build-pyinstaller
-      - package-deb
-      - package-appimage
-      - package-dmg
+    needs: build-pyinstaller
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -168,14 +172,20 @@ jobs:
             git log --oneline --no-decorate > changelog.txt
           fi
 
+      - name: Collect artifacts
+        run: |
+          FILES=""
+          for dir in pyinstaller-linux-x86_64 pyinstaller-macos-x86_64 pyinstaller-windows-x86_64 deb-package appimage-package dmg-package; do
+            if [ -d "$dir" ]; then
+              for f in "$dir"/*; do
+                [ -f "$f" ] && FILES="$FILES $f"
+              done
+            fi
+          done
+          echo "ASSETS=$FILES" >> $GITHUB_ENV
+
       - uses: softprops/action-gh-release@v2
         with:
           name: mdeditor ${{ github.ref_name }}
           body_path: changelog.txt
-          files: |
-            pyinstaller-linux-x86_64/mdeditor-linux-x86_64.tar.gz
-            pyinstaller-macos-x86_64/mdeditor-macos-x86_64.tar.gz
-            pyinstaller-windows-x86_64/mdeditor-windows-x86_64.zip
-            deb-package/*.deb
-            appimage-package/*.AppImage
-            dmg-package/*.dmg
+          files: ${{ env.ASSETS }}
