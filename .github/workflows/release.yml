@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             suffix: linux-x86_64
             asset: mdeditor-linux-x86_64.tar.gz
             compress: tar
@@ -37,7 +37,7 @@ jobs:
         run: pip install . pyinstaller
 
       - name: Build with PyInstaller
-        run: pyinstaller --onefile --name mdeditor --add-data "src:src" src/main.py
+        run: pyinstaller --onefile --name mdeditor --add-data "src:src" --collect-all PySide6 --collect-all shiboken6 src/main.py
 
       - name: Compress (tar.gz)
         if: matrix.compress == 'tar'
