@@ -1,55 +1,64 @@
-# Markdown Editor
+# mdeditor
 
-A simple Markdown editor built with Python and PySide6, following a decoupled layered architecture.
+A simple Markdown editor with AI integration, built with Python and PySide6.
+
+## Download
+
+### Linux
+| Format | How to install |
+|---|---|
+| **AppImage** | Download `mdeditor-*.AppImage`, `chmod +x`, and run |
+| **Ubuntu/Debian** | `sudo dpkg -i mdeditor_*.deb` |
+| **pip** | `pip install mdeditor` |
+
+### macOS
+| Format | How to install |
+|---|---|
+| **DMG** | Download `mdeditor-*.dmg`, drag to Applications |
+| **pip** | `pip install mdeditor` |
+
+### Windows
+| Format | How to install |
+|---|---|
+| **ZIP** | Download `mdeditor-*-windows-x86_64.zip`, extract, run `mdeditor.exe` |
+| **pip** | `pip install mdeditor` |
+
+### From source (any platform)
+```bash
+pip install git+https://github.com/ChrisAylen/mdeditor.git
+mdeditor
+```
 
 ## Features
 - **Split-panel design**: raw markdown editing on the left, live formatted preview on the right.
 - **Markdown rendering**: headings, bold, italic, tables, numbered lists, bullet lists, and task lists all render correctly.
-- **Formatting menu**: Insert headings, lists, tables, bold/italic, and horizontal rules via the Format menu or keyboard shortcuts.
-- **File operations**: Open, edit, save, and save-as Markdown files. New files automatically get a `.md` extension.
-- **AI integration** (via Ollama):
-  - Select text, right-click, and choose **Polish Text** or **Convert to Table**.
-  - Same actions available under the **AI** menu with keyboard shortcuts (`Ctrl+Shift+P`, `Ctrl+Shift+T`).
-  - Configurable Ollama host and model selection via **AI → Settings**.
-  - Supports any Ollama model plus custom/frontier model endpoints.
-  - All AI calls run asynchronously — the UI stays responsive.
-- **Decoupled architecture** for easy maintenance and testing.
+- **Document Outline**: Dockable sidebar showing a real-time hierarchical heading outline; drag-and-drop reordering.
+- **AI Chat Sidebar**: Conversational AI assistant with context modes (selected text, full document, or none).
+- **AI actions**: Polish text, convert to table via right-click or AI menu (`Ctrl+Shift+P`, `Ctrl+Shift+T`).
+- **Auto-save + recovery**: Automatic recovery snapshots; crash-safe with restore/discard prompt on startup.
+- **Formatting menu**: headings (`Ctrl+1/2/3`), bold (`Ctrl+B`), italic (`Ctrl+I`), lists, tables, horizontal rules.
+- **Decoupled architecture**: Logic is pure Python, independent of the Qt UI layer.
 
 ## Architecture
-The project uses a Layered Architecture to ensure logic is independent of the UI:
-- **FileService**: Handles file I/O operations.
-- **EditorState**: Manages the state of the editor (e.g., whether the document is dirty).
-- **AppController**: Orchestrates the flow between the state, service, and UI.
-- **UI**: Presentation layer built with PySide6.
+Decoupled layered architecture: `FileService` (IO) → `EditorState` (State) → `AppController` (Orchestration) → `UI` (Presentation).
 
-## Getting Started
+## Running from source
 
-### Prerequisites
-- Python 3.10+
-- pip
-
-### Installation
-1. Clone the repository.
-2. Create and activate a virtual environment:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-### Running the Application
 ```bash
-python3 -m src.main
+python3 -m venv venv
+source venv/bin/activate
+pip install .
+mdeditor
 ```
 
-### Running Tests
+## Running Tests
+
 ```bash
-pip install pytest
-PYTHONPATH=. pytest tests/
+pip install ".[dev]"
+pytest tests/
 ```
+
+Integration tests with Qt widgets require `QT_QPA_PLATFORM=offscreen` in headless environments.
 
 ## Keyboard Shortcuts
 

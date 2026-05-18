@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mdeditor"
+version = "0.1.0"
+description = "A simple Markdown editor with AI integration"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Chris Aylen" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6",
+    "markdown",
+]
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-qt",
+]
+
+[project.urls]
+Homepage = "https://github.com/ChrisAylen/mdeditor"
+Repository = "https://github.com/ChrisAylen/mdeditor"
+
+[project.scripts]
+mdeditor = "src.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+

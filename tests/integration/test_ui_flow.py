@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from PySide6.QtWidgets import QApplication, QSplitter
 from src.ui.main_window import MainWindow
 from src.ui.menu_bar import MenuBar
@@ -13,20 +14,23 @@ def qapp():
         app = QApplication([])
     return app
 
-def test_main_window_initialization(qapp):
+def _make_window():
+    """Create a MainWindow with recovery check silenced."""
     state = EditorState()
     file_service = FileService()
     controller = AppController(state, file_service)
-    window = MainWindow(controller)
+    with patch.object(MainWindow, "_check_recovery_on_startup"):
+        window = MainWindow(controller)
+    return window
+
+def test_main_window_initialization(qapp):
+    window = _make_window()
     assert "Simple Markdown Editor" in window.windowTitle()
     assert window.centralWidget() is not None
     assert isinstance(window.centralWidget(), QSplitter)
 
 def test_menu_bar_actions(qapp):
-    state = EditorState()
-    file_service = FileService()
-    controller = AppController(state, file_service)
-    window = MainWindow(controller)
+    window = _make_window()
     menu_bar = window.menu_bar
     assert menu_bar.file_menu is not None
     assert menu_bar.action_new is not None

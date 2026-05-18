@@ -1,0 +1,181 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-pyinstaller:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suffix: linux-x86_64
+            asset: mdeditor-linux-x86_64.tar.gz
+            compress: tar
+          - os: macos-latest
+            suffix: macos-x86_64
+            asset: mdeditor-macos-x86_64.tar.gz
+            compress: tar
+          - os: windows-latest
+            suffix: windows-x86_64
+            asset: mdeditor-windows-x86_64.zip
+            compress: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install . pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller --onefile --name mdeditor --add-data "src:src" src/main.py
+
+      - name: Compress (tar.gz)
+        if: matrix.compress == 'tar'
+        run: tar czf ${{ matrix.asset }} -C dist mdeditor
+
+      - name: Compress (zip)
+        if: matrix.compress == 'zip'
+        run: |
+          Compress-Archive -Path dist/mdeditor.exe -DestinationPath ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyinstaller-${{ matrix.suffix }}
+          path: ${{ matrix.asset }}
+
+  package-deb:
+    needs: build-pyinstaller
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyinstaller-linux-x86_64
+      - name: Extract binary
+        run: tar xzf mdeditor-linux-x86_64.tar.gz
+      - name: Create .deb with fpm
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ruby ruby-dev
+          sudo gem install fpm
+          VERSION=${GITHUB_REF_NAME#v}
+          fpm -s dir -t deb \
+            -n mdeditor \
+            -v "$VERSION" \
+            --architecture amd64 \
+            --url "https://github.com/ChrisAylen/mdeditor" \
+            --license MIT \
+            --description "A simple Markdown editor with AI integration" \
+            --vendor "Chris Aylen" \
+            --deb-field "Recommends: ollama" \
+            mdeditor=/usr/bin/mdeditor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: "*.deb"
+
+  package-appimage:
+    needs: build-pyinstaller
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyinstaller-linux-x86_64
+      - name: Extract binary
+        run: tar xzf mdeditor-linux-x86_64.tar.gz
+      - name: Build AppImage
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          # Use linuxdeploy to bundle the PyInstaller binary into an AppDir
+          wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          chmod +x linuxdeploy-x86_64.AppImage
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp mdeditor AppDir/usr/bin/
+          cp mdeditor.desktop AppDir/usr/share/applications/
+          cp icons/mdeditor.svg AppDir/usr/share/icons/hicolor/scalable/apps/mdeditor.svg
+          # Use linuxdeploy's built-in plugin to convert
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --output appimage \
+            --desktop-file AppDir/usr/share/applications/mdeditor.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/mdeditor.svg
+      - name: Rename AppImage
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mv mdeditor-*-x86_64.AppImage "mdeditor-${VERSION}-x86_64.AppImage" || true
+          ls -la *.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage-package
+          path: "*.AppImage"
+
+  package-dmg:
+    needs: build-pyinstaller
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyinstaller-macos-x86_64
+      - name: Extract binary
+        run: tar xzf mdeditor-macos-x86_64.tar.gz
+      - name: Build .dmg
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p dmg
+          cp mdeditor dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "mdeditor $VERSION" \
+            -srcfolder dmg \
+            -ov -format UDZO \
+            "mdeditor-${VERSION}-x86_64.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-package
+          path: "*.dmg"
+
+  release:
+    needs:
+      - build-pyinstaller
+      - package-deb
+      - package-appimage
+      - package-dmg
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+
+      - name: Generate changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            git log "$PREV_TAG..HEAD" --oneline --no-decorate > changelog.txt
+          else
+            git log --oneline --no-decorate > changelog.txt
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: mdeditor ${{ github.ref_name }}
+          body_path: changelog.txt
+          files: |
+            pyinstaller-linux-x86_64/mdeditor-linux-x86_64.tar.gz
+            pyinstaller-macos-x86_64/mdeditor-macos-x86_64.tar.gz
+            pyinstaller-windows-x86_64/mdeditor-windows-x86_64.zip
+            deb-package/*.deb
+            appimage-package/*.AppImage
+            dmg-package/*.dmg

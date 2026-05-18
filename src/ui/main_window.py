@@ -218,9 +218,9 @@ class MainWindow(QMainWindow):
             self,
             "Recovery Available",
             "Recovered unsaved changes were found. Would you like to restore them?",
-            QMessageBox.Restore | QMessageBox.Discard,
+            QMessageBox.RestoreDefaults | QMessageBox.Discard,
         )
-        if reply == QMessageBox.Restore:
+        if reply == QMessageBox.RestoreDefaults:
             for rec in recoveries:
                 content = self.controller.recover_content(rec["doc_id"])
                 if content is not None:

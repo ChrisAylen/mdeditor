@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import uuid
 
 from datetime import datetime
@@ -10,10 +11,20 @@ class RecoveryService:
 
     @staticmethod
     def _get_recovery_dir() -> str:
-        base = os.environ.get(
-            "XDG_DATA_HOME",
-            os.path.join(os.path.expanduser("~"), ".local", "share"),
-        )
+        if sys.platform == "win32":
+            base = os.environ.get(
+                "LOCALAPPDATA",
+                os.path.join(os.path.expanduser("~"), "AppData", "Local"),
+            )
+        elif sys.platform == "darwin":
+            base = os.path.join(
+                os.path.expanduser("~"), "Library", "Application Support"
+            )
+        else:
+            base = os.environ.get(
+                "XDG_DATA_HOME",
+                os.path.join(os.path.expanduser("~"), ".local", "share"),
+            )
         return os.path.join(base, "mdeditor", RecoveryService.RECOVERY_DIR_NAME)
 
     @staticmethod

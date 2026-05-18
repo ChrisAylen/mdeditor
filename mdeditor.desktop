@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=mdeditor
+GenericName=Markdown Editor
+Comment=A simple Markdown editor with AI integration
+Exec=mdeditor %F
+Icon=mdeditor
+Terminal=false
+Categories=Office;TextEditor;
+Keywords=markdown;editor;ai;
+MimeType=text/markdown;
+StartupNotify=true
