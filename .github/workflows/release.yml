@@ -100,16 +100,16 @@ jobs:
         run: tar xzf mdeditor-linux-x86_64.tar.gz
       - name: Build AppImage
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+          set -e
+          wget "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
           chmod +x linuxdeploy-x86_64.AppImage
-          # Extract (GitHub CI has no FUSE)
-          ./linuxdeploy-x86_64.AppImage --appimage-extract > /dev/null 2>&1
+          ./linuxdeploy-x86_64.AppImage --appimage-extract
+          ls -la squashfs-root/
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/scalable/apps
           cp mdeditor AppDir/usr/bin/
           cp mdeditor.desktop AppDir/usr/share/applications/
           cp icons/mdeditor.svg AppDir/usr/share/icons/hicolor/scalable/apps/mdeditor.svg
-          ./squashfs-root/linuxdeploy \
+          ./squashfs-root/AppRun \
             --appdir AppDir \
             --output appimage \
             --desktop-file AppDir/usr/share/applications/mdeditor.desktop \
@@ -169,20 +169,14 @@ jobs:
             git log --oneline --no-decorate > changelog.txt
           fi
 
-      - name: Collect artifacts
-        run: |
-          FILES=""
-          for dir in pyinstaller-linux-x86_64 pyinstaller-macos-x86_64 pyinstaller-windows-x86_64 deb-package appimage-package dmg-package; do
-            if [ -d "$dir" ]; then
-              for f in "$dir"/*; do
-                [ -f "$f" ] && FILES="$FILES $f"
-              done
-            fi
-          done
-          echo "ASSETS=$FILES" >> $GITHUB_ENV
-
       - uses: softprops/action-gh-release@v2
         with:
           name: mdeditor ${{ github.ref_name }}
           body_path: changelog.txt
-          files: ${{ env.ASSETS }}
+          files: |
+            pyinstaller-linux-x86_64/mdeditor-linux-x86_64.tar.gz
+            pyinstaller-macos-x86_64/mdeditor-macos-x86_64.tar.gz
+            pyinstaller-windows-x86_64/mdeditor-windows-x86_64.zip
+            deb-package/*.deb
+            appimage-package/*.AppImage
+            dmg-package/*.dmg
