@@ -75,15 +75,13 @@ jobs:
           cp mdeditor "$PKG/usr/bin/"
           cp mdeditor.desktop "$PKG/usr/share/applications/"
           cp icons/mdeditor.svg "$PKG/usr/share/icons/hicolor/scalable/apps/"
-          cat > "$PKG/DEBIAN/control" <<EOF
-Package: mdeditor
-Version: $VERSION
-Architecture: amd64
-Maintainer: Chris Aylen
-Description: A simple Markdown editor with AI integration
-Recommends: ollama
-License: MIT
-EOF
+          echo "Package: mdeditor" > "$PKG/DEBIAN/control"
+          echo "Version: $VERSION" >> "$PKG/DEBIAN/control"
+          echo "Architecture: amd64" >> "$PKG/DEBIAN/control"
+          echo "Maintainer: Chris Aylen" >> "$PKG/DEBIAN/control"
+          echo "Description: A simple Markdown editor with AI integration" >> "$PKG/DEBIAN/control"
+          echo "Recommends: ollama" >> "$PKG/DEBIAN/control"
+          echo "License: MIT" >> "$PKG/DEBIAN/control"
           dpkg-deb --root-owner-group --build "$PKG"
       - uses: actions/upload-artifact@v4
         with:
