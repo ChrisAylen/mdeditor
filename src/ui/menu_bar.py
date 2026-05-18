@@ -19,6 +19,10 @@ class MenuBar(QMenuBar):
         self.action_save_as = self.file_menu.addAction("Save &As...")
         
         self.file_menu.addSeparator()
+        self.action_print = self.file_menu.addAction("&Print")
+        self.action_print.setShortcut("Ctrl+P")
+        
+        self.file_menu.addSeparator()
         self.action_exit = self.file_menu.addAction("&Exit")
 
         # Format Menu

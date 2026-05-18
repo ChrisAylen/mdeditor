@@ -1,3 +1,4 @@
+from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from PySide6.QtWidgets import (
     QMainWindow, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout,
     QSplitter, QMenu, QMessageBox, QDockWidget, QLabel
@@ -89,6 +90,7 @@ class MainWindow(QMainWindow):
         self.menu_bar.action_open.triggered.connect(self._on_open)
         self.menu_bar.action_save.triggered.connect(self._on_save)
         self.menu_bar.action_save_as.triggered.connect(self._on_save_as)
+        self.menu_bar.action_print.triggered.connect(self._on_print)
         self.menu_bar.action_exit.triggered.connect(self.close)
 
         # Connect format menu actions
@@ -424,6 +426,13 @@ class MainWindow(QMainWindow):
                 self._update_save_status()
                 return True
             return False
+
+    def _on_print(self):
+        printer = QPrinter()
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec() != QPrintDialog.DialogCode.Accepted:
+            return
+        self.preview.print_(printer)
 
     def _on_save(self):
         return self._on_save_logic()
