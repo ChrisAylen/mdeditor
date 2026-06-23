@@ -32,6 +32,7 @@ Repository = "https://github.com/ChrisAylen/mdeditor"
 mdeditor = "src.main:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["src", "src.*"]
 
 
